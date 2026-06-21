@@ -284,8 +284,11 @@ class PasswordManagerCLI:
             self._print_warning(self.locker.get_status_message())
             return False
 
-        attempts = 0
-        while attempts < 3:
+        while True:
+            if self.locker.is_locked:
+                self._print_error(self.locker.get_status_message())
+                return False
+
             try:
                 master_password = getpass.getpass("请输入主密码: ")
             except (EOFError, KeyboardInterrupt):
@@ -298,15 +301,13 @@ class PasswordManagerCLI:
             if self.vault.unlock(master_password):
                 self.locker.record_success()
                 return True
+
+            self.locker.record_failure()
+            if self.locker.is_locked:
+                self._print_error(self.locker.get_status_message())
+                return False
             else:
-                attempts += 1
-                self.locker.record_failure()
-                if self.locker.is_locked:
-                    self._print_error(self.locker.get_status_message())
-                    return False
-                else:
-                    self._print_warning(f"密码错误，{self.locker.get_status_message()}")
-        return False
+                self._print_warning(f"密码错误，{self.locker.get_status_message()}")
 
     def _init_interactive(self):
         """交互式初始化"""
@@ -1156,30 +1157,34 @@ class PasswordManagerCLI:
 
     def _ensure_unlocked(self):
         """确保密码库已解锁"""
-        if self.vault.is_locked:
-            if not self.vault.exists():
-                self._error("密码库不存在，请先使用 init 命令创建")
-                sys.exit(1)
+        if not self.vault.is_locked:
+            return
 
+        if not self.vault.exists():
+            self._error("密码库不存在，请先使用 init 命令创建")
+
+        while True:
             if self.locker.is_locked:
                 self._error(self.locker.get_status_message())
-                sys.exit(1)
 
             try:
                 password = getpass.getpass("请输入主密码: ")
             except (EOFError, KeyboardInterrupt):
                 self._error("已取消")
-                sys.exit(1)
+
+            if not password:
+                self._print_warning("密码不能为空")
+                continue
 
             if self.vault.unlock(password):
                 self.locker.record_success()
+                return
+
+            self.locker.record_failure()
+            if self.locker.is_locked:
+                self._error(self.locker.get_status_message())
             else:
-                self.locker.record_failure()
-                if self.locker.is_locked:
-                    self._error(self.locker.get_status_message())
-                else:
-                    self._error(f"密码错误，{self.locker.get_status_message()}")
-                sys.exit(1)
+                self._error(f"密码错误，{self.locker.get_status_message()}")
 
     def _success(self, msg: str):
         """输出成功消息"""

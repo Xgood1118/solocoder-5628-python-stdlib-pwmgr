@@ -35,7 +35,12 @@ class LockManager:
         """检查当前是否处于锁定状态"""
         if self._lock_until == 0:
             return False
-        return time.time() < self._lock_until
+        if time.time() < self._lock_until:
+            return True
+        self._failed_attempts = 0
+        self._lock_until = 0
+        self._save_state()
+        return False
 
     @property
     def remaining_lock_time(self) -> int:
@@ -61,7 +66,6 @@ class LockManager:
         self._failed_attempts += 1
         if self._failed_attempts >= self.max_attempts:
             self._lock_until = time.time() + self.lock_duration
-            self._failed_attempts = 0
         self._save_state()
 
     def record_success(self):
